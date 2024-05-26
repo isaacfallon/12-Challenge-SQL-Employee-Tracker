@@ -38,7 +38,7 @@ function mainSelectionPrompt() {
                 `Add a department`,
                 `Add a role`,
                 `Add an employee`,
-                `Update an employee role`,
+                `Update an employee's role`,
                 `Exit application`
             ]
         }
@@ -53,6 +53,10 @@ function mainSelectionPrompt() {
             addDepartment(); 
         } else if (response.mainSelection === `Add a role`) {
             addRole();  
+        } else if (response.mainSelection === `Add an employee`) {
+            addEmployee();   
+        } else if (response.mainSelection === `Update an employee's role`) {
+            updateEmployee();   
         } else {
             process.exit();
         }
@@ -90,13 +94,14 @@ function viewRoles() {
 function viewEmployees() {
     pool.query(
         `SELECT e.id, e.first_name, e.last_name, role.title, department.name AS department, role.salary, CONCAT(m.first_name, ' ', m.last_name) AS manager 
-            FROM employee e 
+            FROM employee e
                 INNER JOIN role 
                     ON e.role_id = role.id 
                 INNER JOIN department 
                     ON role.department_id = department.id 
                 LEFT JOIN employee m 
-                    ON e.manager_id = m.id;`
+                    ON e.manager_id = m.id 
+                    ORDER BY e.id;`
     , (err, result) => {
         if (err) {
             console.error('Error fetching employees:', err);
@@ -170,3 +175,115 @@ function addRole() {
 
     });
 }
+
+function addEmployee() {
+
+    pool.query('SELECT ARRAY(SELECT title FROM role) AS role_title_array', (err, res) => {
+        if (err) {
+          console.error(err);
+          return;
+        }
+    const employeeRolesArray = res.rows[0].role_title_array;
+
+    pool.query(`SELECT ARRAY(SELECT CONCAT(first_name, ' ', last_name) FROM employee) AS employee_list_array`, (err, res) => {
+        if (err) {
+          console.error(err);
+          return;
+        }
+    const employeeListArray = res.rows[0].employee_list_array;
+
+    inquirer.prompt([
+        {
+            type: `input`,
+            message: `What is the employee's first name?`,
+            name: `newEmployeeFirstName`,
+        },
+        {
+            type: `input`,
+            message: `What is the employee's last name?`,
+            name: `newEmployeeLastName`,
+        },
+        {
+            type: `list`,
+            message: `Which is the employee's role?`,
+            name: `newEmployeeRole`,
+            choices: employeeRolesArray,
+        },
+        {
+            type: `list`,
+            message: `Who is the employee's manager?`,
+            name: `newEmployeeManager`,
+            choices: employeeListArray,
+        },
+    ]).then((response) => {
+        let roleID = employeeRolesArray.indexOf(response.newEmployeeRole) + 1;
+
+        let employeeID = employeeListArray.indexOf(response.newEmployeeManager) + 1;
+        
+        pool.query(
+            `INSERT INTO employee(first_name, last_name, role_id, manager_id) VALUES ('${response.newEmployeeFirstName}', '${response.newEmployeeLastName}', ${roleID}, ${employeeID})`
+        , (err, result) => {
+            if (err) {
+                console.error('Error adding employee', err);
+                }
+                console.log(`${response.newEmployeeFirstName} ${response.newEmployeeLastName} successfully added as a new employee.`);
+                mainSelectionPrompt();
+        })
+    })
+
+});
+
+    });
+
+}
+
+function updateEmployee() {
+
+    pool.query(`SELECT ARRAY(SELECT CONCAT(first_name, ' ', last_name) FROM employee) AS employee_list_array`, (err, res) => {
+        if (err) {
+          console.error(err);
+          return;
+        }
+    const employeeListArray = res.rows[0].employee_list_array;
+
+    pool.query('SELECT ARRAY(SELECT title FROM role) AS role_title_array', (err, res) => {
+        if (err) {
+          console.error(err);
+          return;
+        }
+    const employeeRolesArray = res.rows[0].role_title_array;
+
+    inquirer.prompt([
+        {
+            type: `list`,
+            message: `Which employee's role do you want to update?`,
+            name: `employeeList`,
+            choices: employeeListArray,
+        },
+        {
+            type: `list`,
+            message: `Which role do you want to assign to the selected employee?`,
+            name: `roleList`,
+            choices: employeeRolesArray,
+        },
+
+    ]).then((response) => {
+
+        let employeeID = employeeListArray.indexOf(response.employeeList) + 1;
+
+        let roleID = employeeRolesArray.indexOf(response.roleList) + 1;
+
+        pool.query(
+            `UPDATE employee SET role_id = ${roleID} WHERE id = ${employeeID};`
+        , (err, result) => {
+            if (err) {
+                console.error(`Error updating employee's role`, err);
+                }
+                console.log(`Updated employee's role`);
+                mainSelectionPrompt();
+        })
+    })
+})
+    })
+}
+
