@@ -49,6 +49,10 @@ function mainSelectionPrompt() {
             viewRoles();
         } else if (response.mainSelection === `View all employees`) {
             viewEmployees();
+        } else if (response.mainSelection === `Add a department`) {
+            addDepartment(); 
+        } else if (response.mainSelection === `Add a role`) {
+            addRole();  
         } else {
             process.exit();
         }
@@ -100,4 +104,69 @@ function viewEmployees() {
             console.table(result.rows);
             mainSelectionPrompt();
     })
+}
+
+// Function to handle adding a new department to the employee_db
+function addDepartment() {
+    inquirer.prompt([
+        {
+            type: `input`,
+            message: `What is the name of the department?`,
+            name: `newDepartmentName`,
+        }
+    ]).then((response) => {
+        pool.query(
+            `INSERT INTO department(name) VALUES ('${response.newDepartmentName}')`
+        , (err, result) => {
+            if (err) {
+                console.error('Error adding department', err);
+                }
+                console.log(`${response.newDepartmentName} successfully added as a new department.`);
+                mainSelectionPrompt();
+        })
+    })
+}
+
+function addRole() {
+
+    pool.query('SELECT ARRAY(SELECT name FROM department) AS department_names_array', (err, res) => {
+        if (err) {
+          console.error(err);
+          return;
+        }
+      
+    const departmentNamesArray = res.rows[0].department_names_array;
+
+    inquirer.prompt([
+        {
+            type: `input`,
+            message: `What is the name of the role?`,
+            name: `newRoleName`,
+        },
+        {
+            type: `input`,
+            message: `What is the salary of the new role?`,
+            name: `newRoleSalary`,
+        },
+        {
+            type: `list`,
+            message: `Which department does the role belong to?`,
+            name: `newRoleDepartment`,
+            choices: departmentNamesArray,
+        },
+    ]).then((response) => {
+        let departmentID = departmentNamesArray.indexOf(response.newRoleDepartment) + 1;
+        
+        pool.query(
+            `INSERT INTO role(title, salary, department_id) VALUES ('${response.newRoleName}', '${response.newRoleSalary}', ${departmentID})`
+        , (err, result) => {
+            if (err) {
+                console.error('Error adding role', err);
+                }
+                console.log(`${response.newRoleName} successfully added as a new role.`);
+                mainSelectionPrompt();
+        })
+    })
+
+    });
 }
