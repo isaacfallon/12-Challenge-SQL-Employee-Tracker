@@ -1,7 +1,10 @@
-const inquirer = require(`inquirer`);
+// This file is used to contain the logic for running the application. 
 
+// We call our relevant dependencies: 'inquirer' and 'pg'.
+const inquirer = require(`inquirer`);
 const { Pool } = require('pg');
 
+// Create a new instance of the destructured 'Pool' class we use to connect to our postgres account. 
 const pool = new Pool(
     {
       user: 'postgres',
@@ -14,6 +17,7 @@ const pool = new Pool(
 
 pool.connect();
 
+// Init function to display a welcome message and call the 'mainSelectionPrompt()' function so the user sees all prompts. 
 function init() {
     console.log('');
     console.log('Employee Manager Application by Isaac Fallon');
@@ -24,7 +28,7 @@ function init() {
 // Start the application by calling the 'init()' function
 init();
 
-
+// The function to contain the main menu selection when the user either starts the application or enters/views data and is brought back. 
 function mainSelectionPrompt() {
     inquirer.prompt([
         {
@@ -42,6 +46,7 @@ function mainSelectionPrompt() {
                 `Exit application`
             ]
         }
+        // Depending on the user's choice, call that respective function (see the actual functions further below).
     ]).then((response) => {
         if (response.mainSelection === `View all departments`) {
             viewDepartments();
@@ -63,20 +68,26 @@ function mainSelectionPrompt() {
     })
 }
 
+// Function to view a list of all departments
 function viewDepartments() {
+    // SQL query to our connected 'pool' to select all from the 'department' table. 
     pool.query(
         `SELECT * 
             FROM department;`
     , (err, result) => {
+        // If there is an error in the pool.query, log the error parameter in the callback function
         if (err) {
             console.error('Error fetching departments:', err);
             }
+            // Otherwise console.table the resulting query rows and call the mainSelectionPrompt() function to return to the main menu. 
             console.table(result.rows);
             mainSelectionPrompt();
     })
 }
 
+// Function to view a list of all roles
 function viewRoles() {
+    // SQL query to our connected 'pool' to select all from the 'role' table and join the respective department based on its ID.  
     pool.query(
         `SELECT title, role.id, department.name, salary 
             FROM role 
@@ -91,7 +102,10 @@ function viewRoles() {
     })
 }
 
+// Function to view a list of all employees
 function viewEmployees() {
+    // SQL query to our connected 'pool' to select specific parts from the employee table (using 'e' as an alias), the role and department
+    // that belongs to that particular employee based on its ID, and a manager name for that employee (using 'm' as an alias) based on its ID.
     pool.query(
         `SELECT e.id, e.first_name, e.last_name, role.title, department.name AS department, role.salary, CONCAT(m.first_name, ' ', m.last_name) AS manager 
             FROM employee e
@@ -111,14 +125,17 @@ function viewEmployees() {
     })
 }
 
-// Function to handle adding a new department to the employee_db
+// Function to handle adding a new department to the department table in the 'employee_db' database
 function addDepartment() {
+    // Prompt the user for the department name
     inquirer.prompt([
         {
             type: `input`,
             message: `What is the name of the department?`,
             name: `newDepartmentName`,
         }
+        // We capture the 'response' from the promise fulfillment (.then) and make an SQL query to our connected 'pool' 
+        // to insert a new department as a row based on the user input.
     ]).then((response) => {
         pool.query(
             `INSERT INTO department(name) VALUES ('${response.newDepartmentName}')`
@@ -132,16 +149,20 @@ function addDepartment() {
     })
 }
 
+// Function to handle adding a new role to the role table in the 'employee_db' database
 function addRole() {
 
+    // First we create an array based on existing departments in the database to ensure we capture any newly created departments.
+    // The SQL query to our connected 'pool' will grab all department names and put them into the array: 'department_names_array'.
     pool.query('SELECT ARRAY(SELECT name FROM department) AS department_names_array', (err, res) => {
         if (err) {
           console.error(err);
           return;
         }
-      
+    // We then initialise this array of department names to a variable we can use
     const departmentNamesArray = res.rows[0].department_names_array;
 
+    // Prompt the user for the new role information. 
     inquirer.prompt([
         {
             type: `input`,
@@ -157,11 +178,15 @@ function addRole() {
             type: `list`,
             message: `Which department does the role belong to?`,
             name: `newRoleDepartment`,
+            // Pull the most up to date department list as selectable choices from the array of departments 'departmentNamesArray'
             choices: departmentNamesArray,
         },
     ]).then((response) => {
+        // To actually identify the department chosen for our SQL query below, we initialise a variable as the 'index + 1' of whatever that department was. 
+        // For example, if 'Development' is chosen, that has an index of 0, but then if we add 1, we get our ID value of 1. 
         let departmentID = departmentNamesArray.indexOf(response.newRoleDepartment) + 1;
         
+        // We then make an SQL query to our connected 'pool' to insert a new role as a row based on the user input and calculated ID.
         pool.query(
             `INSERT INTO role(title, salary, department_id) VALUES ('${response.newRoleName}', '${response.newRoleSalary}', ${departmentID})`
         , (err, result) => {
@@ -175,9 +200,10 @@ function addRole() {
 
     });
 }
-
+// Function to handle adding a new employee to the employee table in the 'employee_db' database
 function addEmployee() {
 
+    // Similar to in the addRole() function, we create arrays based on the existing roles and employees in the database. 
     pool.query('SELECT ARRAY(SELECT title FROM role) AS role_title_array', (err, res) => {
         if (err) {
           console.error(err);
@@ -192,6 +218,7 @@ function addEmployee() {
         }
     const employeeListArray = res.rows[0].employee_list_array;
 
+    // We then prompt the user for the new employee's information
     inquirer.prompt([
         {
             type: `input`,
@@ -207,19 +234,25 @@ function addEmployee() {
             type: `list`,
             message: `Which is the employee's role?`,
             name: `newEmployeeRole`,
+            // The choices for the roles are set by the newly created 'employeeRolesArray'
             choices: employeeRolesArray,
         },
         {
             type: `list`,
             message: `Who is the employee's manager?`,
             name: `newEmployeeManager`,
+            // The choices for the employees to choose as a manager are set by the newly created 'employeeListArray'
             choices: employeeListArray,
         },
     ]).then((response) => {
-        let roleID = employeeRolesArray.indexOf(response.newEmployeeRole) + 1;
 
+        // Similar to in the addRole() function, we initialise a variable as the 'index + 1' of whatever the chosen role and employee was. 
+        // This way, we can actually identify the ID based on the user selection. 
+
+        let roleID = employeeRolesArray.indexOf(response.newEmployeeRole) + 1;
         let employeeID = employeeListArray.indexOf(response.newEmployeeManager) + 1;
         
+        // We then make an SQL query to our connected 'pool' to insert a new employee as a row based on the user input and calculated IDs for role and manager. 
         pool.query(
             `INSERT INTO employee(first_name, last_name, role_id, manager_id) VALUES ('${response.newEmployeeFirstName}', '${response.newEmployeeLastName}', ${roleID}, ${employeeID})`
         , (err, result) => {
@@ -237,8 +270,12 @@ function addEmployee() {
 
 }
 
-function updateEmployee() {
+// Function to handle updating an employee's role 'in the 'employee_db' database
 
+function updateEmployee() {
+    // The logic is functionally very similar to the addEmployee() function. 
+
+    // Pull in the most up to date lists of employees and roles and assign them to variables which hold an array of choices to pull from when prompted. 
     pool.query(`SELECT ARRAY(SELECT CONCAT(first_name, ' ', last_name) FROM employee) AS employee_list_array`, (err, res) => {
         if (err) {
           console.error(err);
@@ -270,9 +307,10 @@ function updateEmployee() {
     ]).then((response) => {
 
         let employeeID = employeeListArray.indexOf(response.employeeList) + 1;
-
         let roleID = employeeRolesArray.indexOf(response.roleList) + 1;
 
+        // The main difference is this SQL query. 
+        // We update the employee by setting their roleID as the one chosen from the inquirer prompt where their ID is equal to that particular employee in the table row. 
         pool.query(
             `UPDATE employee SET role_id = ${roleID} WHERE id = ${employeeID};`
         , (err, result) => {
@@ -286,4 +324,3 @@ function updateEmployee() {
 })
     })
 }
-
